@@ -1,5 +1,5 @@
 {
-  "name": "@taskflow/cli",
+  "name": "@taskflowapp/cli",
   "version": "0.1.0",
   "description": "TaskFlow command-line interface — drive your tasks from the terminal.",
   "license": "MIT",
@@ -38,7 +38,7 @@
   },
   "dependencies": {
     "@inquirer/prompts": "^5.0.0",
-    "@taskflow/client": "file:../taskflow-client",
+    "@taskflowapp/sdk": "^0.1.0",
     "chalk": "^5.3.0",
     "commander": "^12.1.0"
   },

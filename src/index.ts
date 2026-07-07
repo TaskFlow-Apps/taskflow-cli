@@ -1,23 +1,23 @@
 #!/usr/bin/env node
 /**
- * @taskflow/cli — terminal interface to TaskFlow.
+ * @taskflowapp/cli — terminal interface to TaskFlow.
  *
- *     npx @taskflow/cli login                     # paste your tfp_ token
- *     npx @taskflow/cli new "Fix login bug"        # smart routing
- *     npx @taskflow/cli list                      # tasks where I'm involved
- *     npx @taskflow/cli list --project TF         # all tasks of TF
- *     npx @taskflow/cli show TF-12
- *     npx @taskflow/cli move TF-12 in-review
- *     npx @taskflow/cli comment TF-12 "à tester"
- *     npx @taskflow/cli link-pr TF-12 <url>
- *     npx @taskflow/cli search "deploy"
+ *     npx @taskflowapp/cli login                     # paste your tfp_ token
+ *     npx @taskflowapp/cli new "Fix login bug"        # smart routing
+ *     npx @taskflowapp/cli list                      # tasks where I'm involved
+ *     npx @taskflowapp/cli list --project TF         # all tasks of TF
+ *     npx @taskflowapp/cli show TF-12
+ *     npx @taskflowapp/cli move TF-12 in-review
+ *     npx @taskflowapp/cli comment TF-12 "à tester"
+ *     npx @taskflowapp/cli link-pr TF-12 <url>
+ *     npx @taskflowapp/cli search "deploy"
  *
  * Tokens are stored in `~/.config/taskflow/config.json` (XDG-style).
  */
 import { Command, Option } from 'commander';
 import chalk from 'chalk';
 import { input, password, select } from '@inquirer/prompts';
-import { TaskFlowClient, TaskFlowError, parseTaskRef } from '@taskflow/client';
+import { TaskFlowClient, TaskFlowError, parseTaskRef } from '@taskflowapp/sdk';
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';

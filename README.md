@@ -1,4 +1,4 @@
-# @taskflow/cli
+# @taskflowapp/cli
 
 Terminal interface for TaskFlow. Drive your tasks from anywhere — local scripts, CI, Git hooks, the editor terminal.
 
@@ -6,14 +6,14 @@ Terminal interface for TaskFlow. Drive your tasks from anywhere — local script
 
 ```bash
 # No install — just use npx
-npx @taskflow/cli login
-npx @taskflow/cli new "Investigate webhook timeout"
+npx @taskflowapp/cli login
+npx @taskflowapp/cli new "Investigate webhook timeout"
 ```
 
 If you prefer a real binary:
 
 ```bash
-pnpm global add @taskflow/cli
+pnpm global add @taskflowapp/cli
 taskflow login
 ```
 
@@ -24,7 +24,7 @@ Generate a personal-access token at `https://<your-taskflow-host>/settings/api-t
 Then:
 
 ```bash
-npx @taskflow/cli login
+npx @taskflowapp/cli login
 # Enter your API URL (default http://localhost:3000) and paste the tfp_… token.
 ```
 
