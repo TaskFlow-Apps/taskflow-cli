@@ -101,7 +101,7 @@ const program = new Command();
 program
   .name('taskflow')
   .description(chalk.bold('TaskFlow') + ' — drive your tasks from the terminal.')
-  .version('0.1.0')
+  .version('0.2.0')
   .addOption(new Option('--json', 'Output machine-readable JSON').hideHelp());
 
 // ── login ──────────────────────────────────────────────────────────────────
@@ -485,6 +485,275 @@ program
       process.exit(1);
     }
   });
+
+// ── inbox (smart inbox) ─────────────────────────────────────────────────────
+
+program
+  .command('inbox')
+  .description('Show the Smart Inbox (5 grouped sections: review, mentions, active, recent, stale)')
+  .option('--mine', 'Restrict to projects where I am owner / member')
+  .action(async (opts) => {
+    const tf = getClient();
+    try {
+      const inbox = await tf.smartInbox(opts.mine ? 'mine' : 'all');
+      process.stdout.write(
+        chalk.bold(
+          `Smart Inbox (${inbox.scope === 'mine' ? 'mes projets' : 'tous les projets visibles'}) — ${inbox.counts.total} item(s)\n\n`
+        )
+      );
+      const sections: Array<[string, Array<unknown>]> = [
+        ['Awaiting review (assignée à moi, IN_REVIEW)', inbox.groups.awaitingReview],
+        ['Mentioned (@username, non lu)', inbox.groups.mentioned],
+        ['Active (assignée à moi, non terminée)', inbox.groups.assignedActive],
+        ['Recently done (7 derniers jours)', inbox.groups.recentlyDone],
+        ['Stale (14j+ sans activité)', inbox.groups.stale],
+      ];
+      for (const [title, rows] of sections) {
+        if (!rows.length) continue;
+        process.stdout.write(chalk.bold.cyan(`── ${title} (${rows.length}) ──\n`));
+        for (const row of rows as any[]) {
+          const t = row.task ?? row;
+          process.stdout.write('  ' + formatTaskLine(t) + '\n');
+        }
+        process.stdout.write('\n');
+      }
+      if (inbox.counts.total === 0) {
+        process.stdout.write(chalk.dim('Rien à signaler. Belle journée.\n'));
+      }
+    } catch (e: any) {
+      error(e.message);
+      process.exit(1);
+    }
+  });
+
+// ── recurrence ──────────────────────────────────────────────────────────────
+
+program
+  .command('recur <ref>')
+  .description('Set a recurrence rule on a task (DAILY | WEEKLY | MONTHLY)')
+  .option('--frequency <freq>', 'DAILY | WEEKLY | MONTHLY', 'WEEKLY')
+  .option(
+    '--by-day <days...>',
+    'For WEEKLY: 0..6 (Sun..Sat). For MONTHLY: day-of-month (1..31).'
+  )
+  .option('--hour <h>', 'UTC hour-of-day (0..23). Default 9.', '9')
+  .option('--ends-at <iso>', 'ISO datetime — stop spawning after this.')
+  .option('--clear', 'Remove any existing recurrence rule on the task.')
+  .action(async (ref: string, opts) => {
+    const tf = getClient();
+    try {
+      const { taskId } = await resolveAnyTask(tf, ref);
+      if (opts.clear) {
+        await tf.removeRecurrence(taskId);
+        ok(`Recurrence removed on ${ref}`);
+        return;
+      }
+      const freq = String(opts.frequency).toUpperCase();
+      if (!['DAILY', 'WEEKLY', 'MONTHLY'].includes(freq)) {
+        error(`Unknown frequency: ${freq}`);
+        process.exit(2);
+      }
+      const byDay = opts.byDay ? opts.byDay.map((d: string) => Number(d)).filter((n: number) => !Number.isNaN(n)) : undefined;
+      const rule = await tf.setRecurrence(taskId, {
+        frequency: freq as any,
+        byDay,
+        hourOfDay: Number(opts.hour),
+        endsAt: opts.endsAt ?? null,
+      });
+      ok(`Recurrence set on ${ref} — ${freq} (next: ${rule.rule.nextSpawnAt})`);
+    } catch (e: any) {
+      error(e.message);
+      process.exit(1);
+    }
+  });
+
+// ── dependencies ────────────────────────────────────────────────────────────
+
+program
+  .command('deps <ref> <action> <otherRef>')
+  .description('Manage blockers: deps TF-12 add TF-10 | deps TF-12 remove TF-10')
+  .action(async (ref: string, action: string, otherRef: string) => {
+    const tf = getClient();
+    const act = action.toLowerCase();
+    if (act !== 'add' && act !== 'remove') {
+      error(`Unknown action "${action}" — expected: add | remove`);
+      process.exit(2);
+    }
+    try {
+      const { taskId } = await resolveAnyTask(tf, ref);
+      const { taskId: otherId } = await resolveAnyTask(tf, otherRef);
+      if (act === 'add') {
+        await tf.addDependency(taskId, otherId);
+        ok(`${ref} is now blocked by ${otherRef}`);
+      } else {
+        await tf.removeDependency(taskId, otherId);
+        ok(`Removed blocker ${otherRef} from ${ref}`);
+      }
+    } catch (e: any) {
+      error(e.message);
+      process.exit(1);
+    }
+  });
+
+// ── time tracking ───────────────────────────────────────────────────────────
+
+/**
+ * Parse "30m", "1h", "2h30m", "90" (treated as minutes) → minutes.
+ */
+function parseDurationToMinutes(input: string): number | null {
+  const s = input.trim().toLowerCase().replace(/\s+/g, '');
+  if (/^\d+$/.test(s)) return Number(s);
+  let total = 0;
+  let matched = false;
+  const re = /(\d+)(h|m)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s)) !== null) {
+    matched = true;
+    const n = Number(m[1]);
+    if (m[2] === 'h') total += n * 60;
+    else total += n;
+  }
+  return matched ? total : null;
+}
+
+program
+  .command('log-time <ref> <duration>')
+  .alias('time')
+  .description('Log time on a task. Duration: 30m, 1h, 2h30m, 90 (minutes).')
+  .option('-m, --message <text>', 'What did you do?')
+  .option('--at <iso>', 'When the work happened (ISO). Default: now.')
+  .action(async (ref: string, duration: string, opts) => {
+    const tf = getClient();
+    const minutes = parseDurationToMinutes(duration);
+    if (!minutes || minutes <= 0) {
+      error(`Could not parse duration "${duration}" — try 30m, 1h, 2h30m, 90`);
+      process.exit(2);
+    }
+    try {
+      const { taskId, task } = await resolveAnyTask(tf, ref);
+      const { entry } = await tf.logTime(taskId, {
+        minutes,
+        description: opts.message,
+        startedAt: opts.at,
+      });
+      ok(
+        `Logged ${chalk.bold(`${minutes}m`)} on ${chalk.bold(`${task.project.key}-${task.number}`)} ${chalk.dim('·')} ${chalk.dim(entry.id.slice(0, 8))}`
+      );
+    } catch (e: any) {
+      error(e.message);
+      process.exit(1);
+    }
+  });
+
+// ── share ───────────────────────────────────────────────────────────────────
+
+program
+  .command('share <ref>')
+  .description('Create a public share link for a task (30 days, view-only).')
+  .action(async (ref: string) => {
+    const tf = getClient();
+    try {
+      const { taskId, task } = await resolveAnyTask(tf, ref);
+      const s = await tf.shareTask(taskId);
+      ok(`Share link for ${chalk.bold(`${task.project.key}-${task.number}`)} (expires in ${s.expiresInDays}d):`);
+      process.stdout.write('  ' + chalk.cyan(s.url) + '\n');
+    } catch (e: any) {
+      error(e.message);
+      process.exit(1);
+    }
+  });
+
+// ── bulk ────────────────────────────────────────────────────────────────────
+
+program
+  .command('bulk <action> <refs...>')
+  .description('Bulk action on multiple tasks. action: setStatus | setPriority | delete')
+  .option('--status <s>', 'For setStatus: TODO | IN_PROGRESS | IN_REVIEW | DONE | BLOCKED | CANCELLED')
+  .option('--priority <p>', 'For setPriority: LOW | MEDIUM | HIGH | URGENT')
+  .action(async (action: string, refs: string[], opts) => {
+    const tf = getClient();
+    const act = action;
+    if (!['setStatus', 'setPriority', 'delete'].includes(act)) {
+      error(`Unknown action "${act}" — expected: setStatus | setPriority | delete`);
+      process.exit(2);
+    }
+    if (refs.length === 0) {
+      error('Provide at least one task reference');
+      process.exit(2);
+    }
+    try {
+      const ids: string[] = [];
+      for (const r of refs) {
+        const { taskId } = await resolveAnyTask(tf, r);
+        ids.push(taskId);
+      }
+      const payload: Record<string, string> = {};
+      if (opts.status) payload.status = opts.status.toUpperCase().replace('-', '_');
+      if (opts.priority) payload.priority = opts.priority.toUpperCase();
+      const r = await tf.bulkUpdate({ taskIds: ids, action: act as any, payload });
+      ok(
+        `${act}: ${chalk.bold(`${r.processed} ok`)}${r.failed ? `, ${chalk.red(`${r.failed} failed`)}` : ''}`
+      );
+      for (const f of r.failures) {
+        process.stdout.write(`  ${chalk.red('✗')} ${f.id}: ${f.error}\n`);
+      }
+    } catch (e: any) {
+      error(e.message);
+      process.exit(1);
+    }
+  });
+
+// ── notifications ───────────────────────────────────────────────────────────
+
+program
+  .command('notifications')
+  .alias('notif')
+  .description('List your recent notifications')
+  .option('--read-all', 'Mark every unread notification as read')
+  .action(async (opts) => {
+    const tf = getClient();
+    try {
+      if (opts.readAll) {
+        await tf.markAllNotificationsRead();
+        ok('All notifications marked read');
+        return;
+      }
+      const r = await tf.listNotifications();
+      if (!r.notifications.length) {
+        process.stdout.write(chalk.dim('Aucune notification.\n'));
+        return;
+      }
+      process.stdout.write(
+        chalk.bold(`${r.unreadCount} unread / ${r.notifications.length} total\n\n`)
+      );
+      for (const n of r.notifications.slice(0, 25)) {
+        const dot = n.readAt ? chalk.dim('○') : chalk.cyan('●');
+        const age = chalk.dim(relativeTime(n.createdAt));
+        process.stdout.write(`  ${dot} ${n.title}  ${age}\n`);
+        if (n.body) process.stdout.write(`      ${chalk.dim(n.body)}\n`);
+      }
+    } catch (e: any) {
+      error(e.message);
+      process.exit(1);
+    }
+  });
+
+/** Tiny relative-time formatter — no deps, no locale, good enough for CLI. */
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  const diff = Date.now() - then;
+  const s = Math.round(diff / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.round(h / 24);
+  if (d < 30) return `${d}d ago`;
+  const mo = Math.round(d / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.round(mo / 12)}y ago`;
+}
 
 // ── Run ────────────────────────────────────────────────────────────────────
 
