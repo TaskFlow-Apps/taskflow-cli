@@ -1,23 +1,23 @@
 #!/usr/bin/env node
 /**
- * @taskflowapp/cli — terminal interface to TaskFlow.
+ * @trovyhq/cli — terminal interface to Trovy.
  *
- *     npx @taskflowapp/cli login                     # paste your tfp_ token
- *     npx @taskflowapp/cli new "Fix login bug"        # smart routing
- *     npx @taskflowapp/cli list                      # tasks where I'm involved
- *     npx @taskflowapp/cli list --project TF         # all tasks of TF
- *     npx @taskflowapp/cli show TF-12
- *     npx @taskflowapp/cli move TF-12 in-review
- *     npx @taskflowapp/cli comment TF-12 "à tester"
- *     npx @taskflowapp/cli link-pr TF-12 <url>
- *     npx @taskflowapp/cli search "deploy"
+ *     npx @trovyhq/cli login                     # paste your tfp_ token
+ *     npx @trovyhq/cli new "Fix login bug"        # smart routing
+ *     npx @trovyhq/cli list                      # tasks where I'm involved
+ *     npx @trovyhq/cli list --project TF         # all tasks of TF
+ *     npx @trovyhq/cli show TF-12
+ *     npx @trovyhq/cli move TF-12 in-review
+ *     npx @trovyhq/cli comment TF-12 "à tester"
+ *     npx @trovyhq/cli link-pr TF-12 <url>
+ *     npx @trovyhq/cli search "deploy"
  *
- * Tokens are stored in `~/.config/taskflow/config.json` (XDG-style).
+ * Tokens are stored in `~/.config/trovy/config.json` (XDG-style).
  */
 import { Command, Option } from 'commander';
 import chalk from 'chalk';
 import { input, password, select } from '@inquirer/prompts';
-import { TaskFlowClient, TaskFlowError, parseTaskRef } from '@taskflowapp/sdk';
+import { TrovyClient, TrovyError, parseTaskRef } from '@trovyhq/sdk';
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -26,7 +26,7 @@ import { homedir } from 'node:os';
 // ── Config ─────────────────────────────────────────────────────────────────
 
 const CONFIG_PATH = join(
-  process.env.TASKFLOW_CONFIG_DIR ?? join(homedir(), '.config', 'taskflow'),
+  process.env.TROVY_CONFIG_DIR ?? join(homedir(), '.config', 'trovy'),
   'config.json'
 );
 
@@ -50,15 +50,15 @@ function saveConfig(cfg: Config) {
   writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), { mode: 0o600 });
 }
 
-function getClient(): TaskFlowClient {
+function getClient(): TrovyClient {
   const cfg = loadConfig();
-  const apiUrl = process.env.TASKFLOW_API_URL ?? cfg.apiUrl ?? 'http://localhost:3000';
-  const token = process.env.TASKFLOW_TOKEN ?? cfg.token;
+  const apiUrl = process.env.TROVY_API_URL ?? cfg.apiUrl ?? 'http://localhost:3000';
+  const token = process.env.TROVY_TOKEN ?? cfg.token;
   if (!token) {
-    error('Not logged in. Run `taskflow login` first or set TASKFLOW_TOKEN.');
+    error('Not logged in. Run `trovy login` first or set TROVY_TOKEN.');
     process.exit(2);
   }
-  return new TaskFlowClient({ apiUrl, token });
+  return new TrovyClient({ apiUrl, token });
 }
 
 // ── Output helpers ─────────────────────────────────────────────────────────
@@ -99,8 +99,8 @@ function formatTaskLine(t: any) {
 
 const program = new Command();
 program
-  .name('taskflow')
-  .description(chalk.bold('TaskFlow') + ' — drive your tasks from the terminal.')
+  .name('trovy')
+  .description(chalk.bold('Trovy') + ' — drive your tasks from the terminal.')
   .version('0.2.0')
   .addOption(new Option('--json', 'Output machine-readable JSON').hideHelp());
 
@@ -112,9 +112,9 @@ program
   .option('--api-url <url>', 'Override the API URL')
   .action(async (opts) => {
     const cfg = loadConfig();
-    const apiUrl = opts.apiUrl ?? process.env.TASKFLOW_API_URL ?? cfg.apiUrl ?? 'http://localhost:3000';
+    const apiUrl = opts.apiUrl ?? process.env.TROVY_API_URL ?? cfg.apiUrl ?? 'http://localhost:3000';
 
-    process.stdout.write(chalk.bold('\nTaskFlow CLI\n\n'));
+    process.stdout.write(chalk.bold('\nTrovy CLI\n\n'));
     process.stdout.write(
       `Generate a token at ${chalk.cyan(apiUrl + '/settings/api-tokens')} then paste it below.\n\n`
     );
@@ -126,7 +126,7 @@ program
         v.startsWith('tfp_') && v.length > 12 ? true : 'Token must start with `tfp_`',
     });
 
-    const client = new TaskFlowClient({ apiUrl, token: tokenInput });
+    const client = new TrovyClient({ apiUrl, token: tokenInput });
     try {
       const me = await client.whoami();
       ok(`Authenticated as ${chalk.bold(me.user.name ?? me.user.email)}`);
@@ -137,7 +137,7 @@ program
 
     saveConfig({ ...cfg, apiUrl, token: tokenInput });
     ok(`Saved config to ${chalk.dim(CONFIG_PATH)}`);
-    ok('You can now run `taskflow list`, `taskflow new …`, etc.');
+    ok('You can now run `trovy list`, `trovy new …`, etc.');
   });
 
 // ── logout ─────────────────────────────────────────────────────────────────
@@ -212,7 +212,7 @@ program
   });
 
 async function doCreate(
-  tf: TaskFlowClient,
+  tf: TrovyClient,
   projectRef: string,
   title: string,
   opts: {
@@ -375,7 +375,7 @@ function printTaskDetail(t: any) {
  * uniform `{ taskId, task }` shape.
  */
 async function resolveAnyTask(
-  tf: TaskFlowClient,
+  tf: TrovyClient,
   ref: string
 ): Promise<{ taskId: string; task: any }> {
   if (parseTaskRef(ref)) {
@@ -758,8 +758,8 @@ function relativeTime(iso: string): string {
 // ── Run ────────────────────────────────────────────────────────────────────
 
 program.parseAsync(process.argv).catch((e) => {
-  if (e instanceof TaskFlowError) {
-    error(`TaskFlow ${e.status}: ${e.message}`);
+  if (e instanceof TrovyError) {
+    error(`Trovy ${e.status}: ${e.message}`);
   } else {
     error(e?.message ?? String(e));
   }
