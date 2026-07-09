@@ -12,8 +12,8 @@ importers:
         specifier: ^5.0.0
         version: 5.5.0
       '@trovyhq/sdk':
-        specifier: file:../taskflow-client
-        version: file:../taskflow-client
+        specifier: file:../sdk
+        version: file:../sdk
       chalk:
         specifier: ^5.3.0
         version: 5.6.2
@@ -90,8 +90,8 @@ packages:
     resolution: {integrity: sha512-XvJRx+2KR3YXyYtPUUy+qd9i7p+GO9Ko6VIIpWlBrpWwXDv8WLFeHTxz35CfQFUiBMLXlGHhGzys7lqit9gWag==}
     engines: {node: '>=18'}
 
-  '@trovyhq/sdk@file:../taskflow-client':
-    resolution: {directory: ../taskflow-client, type: directory}
+  '@trovyhq/sdk@file:../sdk':
+    resolution: {directory: ../sdk, type: directory}
     engines: {node: '>=18.17.0'}
 
   '@types/mute-stream@0.0.4':
@@ -304,7 +304,7 @@ snapshots:
     dependencies:
       mute-stream: 1.0.0
 
-  '@trovyhq/sdk@file:../taskflow-client': {}
+  '@trovyhq/sdk@file:../sdk': {}
 
   '@types/mute-stream@0.0.4':
     dependencies:

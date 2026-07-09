@@ -39,7 +39,7 @@
   },
   "dependencies": {
     "@inquirer/prompts": "^5.0.0",
-    "@trovyhq/sdk": "file:../taskflow-client",
+    "@trovyhq/sdk": "file:../sdk",
     "chalk": "^5.3.0",
     "commander": "^12.1.0"
   },
