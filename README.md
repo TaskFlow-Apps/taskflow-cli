@@ -33,7 +33,7 @@ Config lives at `~/.config/trovy/config.json` (XDG-style), mode `0600`.
 You can also set env vars instead:
 
 ```bash
-export TROVY_API_URL=https://api.trovy.app
+export TROVY_API_URL=https://trovy.app
 export TROVY_TOKEN=tfp_xxxxxxxxxxxx
 ```
 
