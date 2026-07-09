@@ -1,7 +1,7 @@
 {
   "name": "@trovyhq/cli",
-  "version": "1.0.0",
-  "description": "Trovy command-line interface — drive your tasks from the terminal.",
+  "version": "1.0.1",
+  "description": "Trovy command-line interface \u2014 drive your tasks from the terminal.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
